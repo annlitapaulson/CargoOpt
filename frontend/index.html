@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <link rel="icon" href="data:," />
+    <meta charset="UTF-8" />
+    <title>CargoOpt 3D Viewer</title>
+    <style>
+      body { margin: 0; overflow: hidden; background: #0a0e1a; }
+      #info {
+        position: absolute; top: 10px; left: 10px;
+        color: white; font-family: sans-serif; font-size: 14px;
+        background: rgba(0,0,0,0.5); padding: 10px; border-radius: 6px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="info">
+      CargoOpt 3D Viewer — drag to rotate, scroll to zoom
+    </div>
+    <button id="optimize-button" style="position: absolute; top: 60px; left: 10px; padding: 8px 16px; font-family: sans-serif; font-size: 14px; cursor: pointer;">
+     Optimize
+    </button>
+<select id="method-select" style="position: absolute; top: 60px; left: 400px; padding: 8px; font-family: sans-serif; font-size: 14px;">
+  <option value="ga">Optimizer: GA</option>
+  <option value="rl">Optimizer: RL</option>
+</select>
+<button id="report-button" style="position: absolute; top: 60px; left: 570px; padding: 8px 16px; font-family: sans-serif; font-size: 14px; cursor: pointer;">
+  Download Report
+</button>
+    <div id="legend" style="position: absolute; top: 110px; left: 10px; color: white; font-family: sans-serif; font-size: 13px; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 6px; max-width: 200px;"></div>
+    <select id="voyage-select" style="position: absolute; top: 60px; left: 110px; padding: 8px; font-family: sans-serif; font-size: 14px;">
+  <option value="330">Chennai to Kochi (330 nm)</option>
+  <option value="430">Chennai to Visakhapatnam (430 nm)</option>
+  <option value="720">Kochi to Mumbai (720 nm)</option>
+  <option value="1600">Chennai to Singapore (1600 nm)</option>
+</select>
+<div id="report" style="position: absolute; top: 60px; right: 10px; color: white; font-family: sans-serif; font-size: 13px; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 6px; min-width: 190px;">Click Optimize to see the voyage report.</div>
+<style>
+  #container-drawer {
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: 320px;
+    height: 100vh;
+    box-sizing: border-box;
+    background: #111827;
+    color: #e5e7eb;
+    font-family: system-ui, sans-serif;
+    font-size: 13px;
+    box-shadow: -4px 0 16px rgba(0, 0, 0, 0.5);
+    transform: translateX(100%);
+    transition: transform 0.25s ease;
+    z-index: 50;
+  }
+  #container-drawer.open { transform: translateX(0); }
+
+  #drawer-tab {
+    position: absolute;
+    left: -34px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 34px;
+    padding: 14px 0;
+    background: #2563eb;
+    color: white;
+    border: none;
+    border-radius: 8px 0 0 8px;
+    cursor: pointer;
+    writing-mode: vertical-rl;
+    font-size: 13px;
+    letter-spacing: 1px;
+  }
+  #drawer-tab:hover { background: #1d4ed8; }
+
+  #drawer-body {
+    height: 100%;
+    overflow-y: auto;
+    box-sizing: border-box;
+    padding: 18px 16px;
+  }
+  .drawer-title { margin: 0 0 6px; font-size: 18px; color: white; }
+  #panel-message { min-height: 18px; margin-bottom: 4px; font-size: 12px; }
+
+  .section-title {
+    margin: 16px 0 8px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #9ca3af;
+  }
+
+  .field { margin-bottom: 10px; }
+  .field label { display: block; margin-bottom: 3px; font-size: 12px; color: #9ca3af; }
+  .field input[type="text"],
+  .field input[type="number"] {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 7px 8px;
+    background: #1f2937;
+    border: 1px solid #374151;
+    border-radius: 6px;
+    color: white;
+    font-size: 13px;
+  }
+  .field input:focus { outline: none; border-color: #2563eb; }
+  .field input:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .field-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  .check-row { display: flex; gap: 16px; margin: 4px 0 12px; }
+  .check-row label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+
+  .button-row { display: flex; gap: 8px; }
+  .btn-primary, .btn-secondary {
+    flex: 1;
+    padding: 9px 10px;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+    color: white;
+  }
+  .btn-primary { background: #2563eb; }
+  .btn-primary:hover { background: #1d4ed8; }
+  .btn-primary:disabled { opacity: 0.6; cursor: wait; }
+  .btn-secondary { background: #374151; }
+  .btn-secondary:hover { background: #4b5563; }
+
+  .container-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    padding: 8px 10px;
+    background: #1f2937;
+    border: 1px solid #374151;
+    border-radius: 8px;
+  }
+  .card-id { font-weight: bold; color: white; }
+  .card-weight { font-size: 12px; color: #9ca3af; margin-top: 2px; }
+  .card-actions { display: flex; gap: 6px; }
+  .btn-small {
+    padding: 4px 10px;
+    background: #374151;
+    border: none;
+    border-radius: 5px;
+    color: white;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .btn-small:hover { background: #4b5563; }
+  .btn-danger { background: #7f1d1d; }
+  .btn-danger:hover { background: #991b1b; }
+</style>
+
+<div id="container-drawer">
+  <button id="drawer-tab">Containers</button>
+
+  <div id="drawer-body">
+    <h2 class="drawer-title">Manage Containers</h2>
+    <div id="panel-message"></div>
+    <div class="section-title">Ship capacity</div>
+    <div id="capacity-text" style="margin-bottom: 8px;">Loading...</div>
+    <div class="button-row">
+      <button id="add-section-button" class="btn-primary">Add bay section (+6)</button>
+      <button id="remove-section-button" class="btn-secondary">Remove last section</button>
+    </div>
+
+    <div class="section-title">Container details</div>
+
+    <div class="field">
+      <label for="f-container-id">Container ID</label>
+      <input type="text" id="f-container-id" placeholder="e.g. CONT007">
+    </div>
+    <div class="field">
+      <label for="f-weight">Weight (kg)</label>
+      <input type="number" id="f-weight" value="10000">
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label for="f-length">Length (m)</label>
+        <input type="number" id="f-length" value="6.06" step="0.01">
+      </div>
+      <div class="field">
+        <label for="f-width">Width (m)</label>
+        <input type="number" id="f-width" value="2.44" step="0.01">
+      </div>
+      <div class="field">
+        <label for="f-height">Height (m)</label>
+        <input type="number" id="f-height" value="2.59" step="0.01">
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="f-port">Destination port</label>
+      <input type="text" id="f-port">
+    </div>
+
+    <div class="check-row">
+      <label><input type="checkbox" id="f-fragile"> Fragile</label>
+      <label><input type="checkbox" id="f-hazardous"> Hazardous</label>
+    </div>
+
+    <div class="button-row">
+      <button id="save-button" class="btn-primary">Add container</button>
+      <button id="cancel-button" class="btn-secondary" style="display: none;">Cancel</button>
+    </div>
+
+    <div class="section-title">Containers in database</div>
+    <div id="container-list">Loading...</div>
+  </div>
+</div>
+<script type="module" src="/src/main.js"></script>
+  </body>
+</html>
